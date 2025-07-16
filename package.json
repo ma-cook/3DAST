@@ -1,6 +1,6 @@
 {
   "name": "3d-ast-generator",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A TypeScript library for parsing Merfolk syntax and generating 3D abstract syntax trees for visualization",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

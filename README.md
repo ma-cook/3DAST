@@ -21,7 +21,7 @@ npm install 3d-ast-generator
 ## Quick Start
 
 ```typescript
-import { AST3DGenerator } from '3d-ast-generator';
+import { MarkdownProcessor, AST3DGenerator } from '3d-ast-generator';
 
 const generator = new AST3DGenerator();
 
@@ -30,7 +30,7 @@ graph3d "My Application"
 
 A[Function: processData]
 B{Component: UserInterface}  
-C((Module: Database))
+C<Datapath: Database>
 
 A --> B : "processed data"
 B -.-> A : "user events"
@@ -44,6 +44,28 @@ console.log(
 
 // Export for your 3D application
 const jsonData = generator.generateJSON(syntax);
+
+// Or process markdown files with multiple diagrams
+const processor = new MarkdownProcessor({
+  layout: { algorithm: 'hierarchical', nodeSpacing: 4.0 },
+  visual: { theme: 'dark' },
+});
+
+const markdownContent = `
+# My Architecture
+\`\`\`merfolk
+graph3d "System Overview"
+A[Function: API] --> B{Component: UI}
+\`\`\`
+`;
+
+const diagrams = processor.processMarkdown(markdownContent);
+diagrams.forEach((diagram) => {
+  if (diagram.errors.length === 0) {
+    console.log(`Diagram: ${diagram.block.title || 'Untitled'}`);
+    console.log(`Nodes: ${diagram.graph.nodes.size}`);
+  }
+});
 ```
 
 ## Syntax Guide
@@ -54,7 +76,9 @@ const jsonData = generator.generateJSON(syntax);
 | -------------------- | --------- | ------------ | ---------------------- |
 | `A[Function: name]`  | Function  | Cube         | Functions, methods     |
 | `B{Component: name}` | Component | Dodecahedron | UI components, modules |
-| `D<Datapath: name>`  | Datapath  | Plane        | Data flows, streams    |
+| `C<Datapath: name>`  | Datapath  | Plane        | Data flows, streams    |
+
+**Note**: Use `<Datapath: name>` instead of `((Module: name))` for plane geometry.
 
 ### Connection Types
 
@@ -114,9 +138,41 @@ const generator = new AST3DGenerator({
 
 ## API Reference
 
+### Available Exports
+
+```typescript
+import {
+  // Main Classes
+  AST3DGenerator,
+  MarkdownProcessor,
+
+  // Core Models
+  Node,
+  Connection,
+  Graph,
+
+  // Parsers
+  MermaidParser,
+  ASTBuilder,
+
+  // Utilities
+  PositionCalculator,
+  Validator,
+  Helpers,
+
+  // Types
+  NodeType,
+  ConnectionType,
+  GeometryType,
+
+  // Configuration
+  DEFAULT_CONFIG,
+} from '3d-ast-generator';
+```
+
 ### AST3DGenerator
 
-Main class for generating 3D AST graphs.
+Main class for generating 3D AST graphs from Merfolk syntax.
 
 #### Methods
 
@@ -124,6 +180,24 @@ Main class for generating 3D AST graphs.
 - `generateJSON(input: string): AST3DGraph` - Generate serializable format
 - `validate(input: string): ValidationResult` - Validate syntax
 - `parseOnly(input: string): ParsedGraph` - Parse without building
+
+### MarkdownProcessor
+
+Process markdown files containing multiple Merfolk code blocks.
+
+#### Constructor
+
+```typescript
+const processor = new MarkdownProcessor(config?: {
+  layout?: { algorithm: string, nodeSpacing: number },
+  visual?: { theme: string, colors: object }
+});
+```
+
+#### Methods
+
+- `processMarkdown(content: string): ProcessedDiagram[]` - Extract and process all Merfolk blocks
+- `extractMerfolkBlocks(content: string): MerfolkBlock[]` - Extract code blocks only
 
 ### Graph
 
@@ -176,59 +250,92 @@ The library outputs standardized 3D data that can be consumed by various 3D engi
 
 ```typescript
 import * as THREE from 'three';
-import { AST3DGenerator } from '3d-ast-generator';
+import { MarkdownProcessor } from '3d-ast-generator';
 
-const generator = new AST3DGenerator();
-const graph = generator.generate(merfolkSyntax);
+// Process markdown with Merfolk diagrams
+const processor = new MarkdownProcessor();
+const markdownContent = `
+\`\`\`merfolk
+graph3d "My System"
+A[Function: WebServer] --> B{Component: Database}
+C<Datapath: APIGateway> --> A
+\`\`\`
+`;
+
+const diagrams = processor.processMarkdown(markdownContent);
 
 // Create Three.js scene
 const scene = new THREE.Scene();
 
-// Add nodes as 3D objects
-for (const [nodeId, node] of graph.nodes) {
-  let geometry;
+diagrams.forEach((diagram, diagramIndex) => {
+  if (diagram.errors.length === 0) {
+    const graph = diagram.graph;
 
-  switch (node.geometry) {
-    case 'cube':
-      geometry = new THREE.BoxGeometry(
-        node.transform.scale.x,
-        node.transform.scale.y,
-        node.transform.scale.z
+    // Add nodes as 3D objects
+    for (const [nodeId, node] of graph.nodes) {
+      let geometry;
+
+      switch (node.geometry) {
+        case 'cube':
+          geometry = new THREE.BoxGeometry(
+            node.transform.scale.x,
+            node.transform.scale.y,
+            node.transform.scale.z
+          );
+          break;
+        case 'dodecahedron':
+          geometry = new THREE.DodecahedronGeometry(1);
+          break;
+        case 'plane':
+          geometry = new THREE.PlaneGeometry(
+            node.transform.scale.x,
+            node.transform.scale.y
+          );
+          break;
+      }
+
+      const material = new THREE.MeshStandardMaterial({
+        color: node.visual.color || '#ffffff',
+        opacity: node.visual.opacity || 1.0,
+        transparent: true,
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(
+        node.transform.position.x + diagramIndex * 20,
+        node.transform.position.y,
+        node.transform.position.z
       );
-      break;
-    // ... other geometries
+
+      scene.add(mesh);
+    }
+
+    // Add connections as lines
+    for (const [connId, connection] of graph.connections) {
+      const points = [
+        new THREE.Vector3(
+          connection.source.anchor?.x || 0,
+          connection.source.anchor?.y || 0,
+          connection.source.anchor?.z || 0
+        ),
+        ...connection.waypoints.map((p) => new THREE.Vector3(p.x, p.y, p.z)),
+        new THREE.Vector3(
+          connection.target.anchor?.x || 0,
+          connection.target.anchor?.y || 0,
+          connection.target.anchor?.z || 0
+        ),
+      ];
+
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({
+        color: connection.visual.color || '#ffffff',
+      });
+
+      const line = new THREE.Line(geometry, material);
+      scene.add(line);
+    }
   }
-
-  const material = new THREE.MeshStandardMaterial({
-    color: node.visual.color,
-    opacity: node.visual.opacity,
-    transparent: true,
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(
-    node.transform.position.x,
-    node.transform.position.y,
-    node.transform.position.z
-  );
-
-  scene.add(mesh);
-}
-
-// Add connections as lines
-for (const [connId, connection] of graph.connections) {
-  const points = connection
-    .getPathPoints()
-    .map((p) => new THREE.Vector3(p.x, p.y, p.z));
-
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
-    color: connection.visual.color,
-  });
-
-  const line = new THREE.Line(geometry, material);
-  scene.add(line);
-}
+});
 ```
 
 ## Examples
@@ -263,59 +370,120 @@ You can automatically generate 3D diagrams by uploading markdown files containin
 ### Installation
 
 ```bash
-npm install 3d-ast-generator three
+npm install 3d-ast-generator
 ```
 
 ### Basic Setup
 
 ```typescript
-import * as THREE from 'three';
-import { MerfolkDiagramBuilder } from '3d-ast-generator';
+import { MarkdownProcessor } from '3d-ast-generator';
 
-// Create your Three.js scene
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-const renderer = new THREE.WebGLRenderer();
+// Create processor with configuration
+const processor = new MarkdownProcessor({
+  layout: {
+    algorithm: 'hierarchical',
+    nodeSpacing: 4.0,
+    layers: 5,
+  },
+  visual: {
+    theme: 'dark',
+    colors: {
+      function: '#4CAF50',
+      component: '#2196F3',
+      datapath: '#FF9800',
+    },
+  },
+});
 
-// Setup the diagram builder
-const builder = new MerfolkDiagramBuilder(scene);
+// Process markdown file upload
+const handleFileUpload = async (file: File) => {
+  try {
+    const content = await file.text();
+    const diagrams = processor.processMarkdown(content);
 
-// Upload and process a markdown file
-const uploadFile = async (file: File) => {
-  const result = await builder.uploadMarkdownFile(file);
+    const validDiagrams = diagrams.filter((d) => d.errors.length === 0);
+    const errors = diagrams
+      .filter((d) => d.errors.length > 0)
+      .flatMap((d) => d.errors);
 
-  if (result.success) {
-    console.log(`Generated ${result.diagrams.length} 3D diagrams!`);
-    console.log(`Total nodes: ${result.metadata.totalNodes}`);
-    console.log(`Total connections: ${result.metadata.totalConnections}`);
-  } else {
-    console.error('Upload failed:', result.errors);
+    if (validDiagrams.length > 0) {
+      console.log(`Generated ${validDiagrams.length} 3D diagrams!`);
+
+      // Process each diagram for your 3D application
+      validDiagrams.forEach((diagram, index) => {
+        const graph = diagram.graph;
+        console.log(`Diagram ${index + 1}:`, {
+          title: diagram.block.title || 'Untitled',
+          nodes: graph.nodes.size,
+          connections: graph.connections.size,
+          bounds: graph.getBounds(),
+        });
+
+        // Add to your 3D scene here
+        addDiagramToScene(graph, index);
+      });
+    } else {
+      console.error('No valid diagrams found:', errors);
+    }
+  } catch (error) {
+    console.error('Upload failed:', error);
   }
 };
 
-// Or process markdown content directly
-const processMarkdown = async (markdownContent: string) => {
-  const result = await builder.processMarkdownContent(markdownContent);
-  return result;
-};
+// Helper function to add diagram to your 3D scene
+function addDiagramToScene(graph, diagramIndex) {
+  // Implementation depends on your 3D library (Three.js, Babylon.js, etc.)
+  // See the Three.js example above for complete implementation
+}
 ```
 
-### File Upload UI
+### File Upload UI Helper
 
 ```typescript
-import { createMarkdownUploader } from '3d-ast-generator/examples/markdown-uploader';
+// Simple file upload handler
+function setupFileUpload() {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.md,.markdown';
+  fileInput.multiple = true;
 
-// Create an upload area in your HTML
-const uploader = createMarkdownUploader(scene, 'upload-container', (result) => {
-  if (result.success) {
-    console.log('Diagrams generated:', result.diagrams);
-  }
-});
+  fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+
+    for (const file of files) {
+      if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+        await handleFileUpload(file);
+      }
+    }
+  });
+
+  // Trigger file selection
+  fileInput.click();
+}
+
+// Or drag and drop
+function setupDragAndDrop(dropZone: HTMLElement) {
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+  });
+
+  dropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+
+    const files = Array.from(e.dataTransfer?.files || []);
+    for (const file of files) {
+      if (file.type === 'text/markdown' || file.name.endsWith('.md')) {
+        await handleFileUpload(file);
+      }
+    }
+  });
+}
 ```
 
 ### Markdown File Format
@@ -365,32 +533,63 @@ Each Merfolk syntax element becomes a 3D object:
 - Connections → **Line geometries** between nodes
 - Face connections → **Precise face-to-face connections**
 
-### Example Integration
+### Complete Example
 
 ```typescript
-// Complete example with file upload
-async function setupMerfolkApp() {
-  const scene = new THREE.Scene();
-  const builder = new MerfolkDiagramBuilder(scene);
+import { MarkdownProcessor } from '3d-ast-generator';
 
-  // Handle file input
-  const fileInput = document.getElementById('file-input') as HTMLInputElement;
-  fileInput.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      const result = await builder.uploadMarkdownFile(file);
-
-      if (result.success) {
-        // Focus camera on generated diagrams
-        focusCameraOnDiagrams(result.diagrams);
-
-        // Display metadata
-        console.log(result.metadata);
-      }
-    }
+async function processArchitectureFile(file: File) {
+  const processor = new MarkdownProcessor({
+    visual: {
+      theme: 'dark',
+      colors: {
+        function: '#4CAF50', // Green cubes
+        component: '#2196F3', // Blue dodecahedrons
+        datapath: '#FF9800', // Orange planes
+      },
+    },
   });
 
-  return builder;
+  try {
+    const content = await file.text();
+    const diagrams = processor.processMarkdown(content);
+
+    console.log(`Processed ${file.name}:`);
+    diagrams.forEach((diagram, i) => {
+      if (diagram.errors.length === 0) {
+        const graph = diagram.graph;
+        console.log(
+          `  Diagram ${i + 1}: ${graph.nodes.size} nodes, ${
+            graph.connections.size
+          } connections`
+        );
+
+        // Convert to your 3D application format
+        const diagramData = {
+          title: diagram.block.title,
+          nodes: Array.from(graph.nodes.values()).map((node) => ({
+            id: node.id,
+            type: node.type,
+            geometry: node.geometry,
+            position: node.transform.position,
+            color: node.visual.color,
+          })),
+          connections: Array.from(graph.connections.values()).map((conn) => ({
+            source: conn.source.nodeId,
+            target: conn.target.nodeId,
+            type: conn.type,
+          })),
+        };
+
+        // Add to your 3D scene, save to database, etc.
+        addToScene(diagramData);
+      } else {
+        console.error(`  Diagram ${i + 1} has errors:`, diagram.errors);
+      }
+    });
+  } catch (error) {
+    console.error('Processing failed:', error);
+  }
 }
 ```
 
