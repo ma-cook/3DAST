@@ -3,7 +3,7 @@ import { Graph } from '../models/graph';
 import { Config } from '../types/config';
 
 /**
- * Extracted 3D AST block from markdown
+ * Extracted Merfolk block from markdown
  */
 export interface AST3DBlock {
   content: string;
@@ -24,7 +24,7 @@ export interface ProcessedDiagram {
 }
 
 /**
- * Utility for processing 3D AST syntax in markdown files
+ * Utility for processing Merfolk syntax in markdown files
  */
 export class MarkdownProcessor {
   private generator: AST3DGenerator;
@@ -34,7 +34,7 @@ export class MarkdownProcessor {
   }
 
   /**
-   * Extract all 3D AST code blocks from markdown content
+   * Extract all Merfolk code blocks from markdown content
    */
   extractAST3DBlocks(markdownContent: string): AST3DBlock[] {
     const lines = markdownContent.split('\n');
@@ -45,8 +45,8 @@ export class MarkdownProcessor {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Start of 3D AST block
-      if (line.trim().startsWith('```3d-ast')) {
+      // Start of Merfolk block
+      if (line.trim().startsWith('```merfolk')) {
         currentBlock = {
           index: blocks.length,
           lineStart: i + 1,
@@ -54,7 +54,7 @@ export class MarkdownProcessor {
         blockContent = [];
 
         // Extract title if present
-        const titleMatch = line.match(/```3d-ast\s+"([^"]+)"/);
+        const titleMatch = line.match(/```merfolk\s+"([^"]+)"/);
         if (titleMatch) {
           currentBlock.title = titleMatch[1];
         }
@@ -85,7 +85,7 @@ export class MarkdownProcessor {
   }
 
   /**
-   * Process all 3D AST blocks in markdown content
+   * Process all Merfolk blocks in markdown content
    */
   processMarkdown(markdownContent: string): ProcessedDiagram[] {
     const blocks = this.extractAST3DBlocks(markdownContent);
