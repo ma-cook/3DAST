@@ -18,6 +18,7 @@ export class Connection {
   public type: ConnectionType;
   public source: ConnectionPoint;
   public target: ConnectionPoint;
+  public label?: string;
   public visual: VisualProperties;
   public metadata: Record<string, any>;
   public waypoints: Position3D[];
@@ -26,12 +27,14 @@ export class Connection {
     id: string,
     type: ConnectionType,
     source: ConnectionPoint,
-    target: ConnectionPoint
+    target: ConnectionPoint,
+    label?: string
   ) {
     this.id = id;
     this.type = type;
     this.source = source;
     this.target = target;
+    this.label = label;
     this.visual = {
       color: this.getDefaultColor(),
       opacity: 0.8,

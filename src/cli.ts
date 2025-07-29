@@ -22,7 +22,7 @@ program
     'Layout algorithm (hierarchical|force-directed|circular|grid)',
     'hierarchical'
   )
-  .option('--spacing <number>', 'Node spacing', '3.0')
+  .option('--spacing <number>', 'Node spacing', '30.0')
   .action((file: string, options: any) => {
     try {
       if (!fs.existsSync(file)) {

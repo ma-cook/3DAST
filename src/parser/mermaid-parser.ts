@@ -186,23 +186,32 @@ export class MermaidParser {
     // E[[Class: UserModel]]
 
     const patterns = [
-      /^([A-Za-z0-9_]+)\[([^:]+):\s*([^\]]+)\](?:\s*\{(.+)\})?/, // Square brackets
-      /^([A-Za-z0-9_]+)\{([^:]+):\s*([^\}]+)\}(?:\s*\{(.+)\})?/, // Curly brackets
-      /^([A-Za-z0-9_]+)\(\(([^:]+):\s*([^\)]+)\)\)(?:\s*\{(.+)\})?/, // Double parentheses
-      /^([A-Za-z0-9_]+)<([^:]+):\s*([^>]+)>(?:\s*\{(.+)\})?/, // Angle brackets
-      /^([A-Za-z0-9_]+)\[\[([^:]+):\s*([^\]]+)\]\](?:\s*\{(.+)\})?/, // Double square brackets
+      /^([A-Za-z0-9_]+)\[([^:]+):\s*([^\]]+)\]/, // Square brackets
+      /^([A-Za-z0-9_]+)\{([^:]+):\s*([^\}]+)\}/, // Curly brackets
+      /^([A-Za-z0-9_]+)\(\(([^:]+):\s*([^\)]+)\)\)/, // Double parentheses
+      /^([A-Za-z0-9_]+)<([^:]+):\s*([^>]+)>/, // Angle brackets
+      /^([A-Za-z0-9_]+)\[\[([^:]+):\s*([^\]]+)\]\]/, // Double square brackets
     ];
 
     for (const pattern of patterns) {
       const match = line.match(pattern);
       if (match) {
-        const [, id, typeStr, name, propertiesStr] = match;
+        const [, id, typeStr, name] = match;
 
         const type = this.parseNodeType(typeStr);
         const geometry = this.parseGeometry(line);
-        const properties = propertiesStr
-          ? this.parseProperties(propertiesStr)
-          : {};
+
+        // Check if there's a property block starting on this line or the next
+        let properties: Record<string, any> = {};
+
+        // Check if current line has inline properties
+        const inlinePropsMatch = line.match(/\s*\{(.+)\}\s*$/);
+        if (inlinePropsMatch) {
+          properties = this.parseProperties(inlinePropsMatch[1]);
+        } else {
+          // Check if next line starts a property block
+          properties = this.parseMultiLineProperties();
+        }
 
         return {
           id: id || `node_${this.nodeIdCounter++}`,
@@ -228,16 +237,27 @@ export class MermaidParser {
     // A --- B
     // A --> B@front
     // A@back --> B@top
+    // A -->|"label"| B (Mermaid-style labeled connections)
 
     const patterns = [
+      // Pattern for -->|"label"| syntax (Mermaid-style)
+      /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(-->|---|-.->|==)\s*\|\s*['""]([^'"]+)['"]\s*\|\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?/,
+      // Pattern for : "label" syntax (original)
       /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(-->|---|-.->|==)\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(?::\s*['""]([^'"]+)['""])?/,
     ];
 
     for (const pattern of patterns) {
       const match = line.match(pattern);
       if (match) {
-        const [, sourceId, sourceFace, arrow, targetId, targetFace, label] =
-          match;
+        let sourceId, sourceFace, arrow, targetId, targetFace, label;
+
+        if (pattern === patterns[0]) {
+          // -->|"label"| syntax
+          [, sourceId, sourceFace, arrow, label, targetId, targetFace] = match;
+        } else {
+          // : "label" syntax
+          [, sourceId, sourceFace, arrow, targetId, targetFace, label] = match;
+        }
 
         const type = this.parseConnectionType(arrow);
 
@@ -341,6 +361,63 @@ export class MermaidParser {
       const [key, value] = pair.split(':').map((s) => s.trim());
       if (key && value) {
         properties[key] = value.replace(/['"]/g, '');
+      }
+    }
+
+    return properties;
+  }
+
+  /**
+   * Parse multi-line property block
+   */
+  private parseMultiLineProperties(): Record<string, any> {
+    const properties: Record<string, any> = {};
+
+    // Check if the next line starts with '{'
+    if (
+      this.currentLine + 1 < this.lines.length &&
+      this.lines[this.currentLine + 1].trim() === '{'
+    ) {
+      this.currentLine++; // Skip the opening '{'
+      this.currentLine++; // Move to first property line
+
+      // Parse properties until we hit the closing '}'
+      while (this.currentLine < this.lines.length) {
+        const line = this.lines[this.currentLine].trim();
+
+        // End of property block
+        if (line === '}') {
+          break;
+        }
+
+        // Parse property line
+        if (line.includes(':')) {
+          const [key, ...valueParts] = line.split(':');
+          const value = valueParts.join(':').trim();
+
+          if (key && value) {
+            // Handle different value types
+            let parsedValue: any = value.replace(/['"]/g, '');
+
+            // Try to parse as number
+            if (!isNaN(Number(parsedValue))) {
+              parsedValue = Number(parsedValue);
+            }
+
+            // Try to parse as array (simple format like [0, 0, 0])
+            if (parsedValue.startsWith('[') && parsedValue.endsWith(']')) {
+              try {
+                parsedValue = JSON.parse(parsedValue);
+              } catch (e) {
+                // Keep as string if JSON parsing fails
+              }
+            }
+
+            properties[key.trim()] = parsedValue;
+          }
+        }
+
+        this.currentLine++;
       }
     }
 

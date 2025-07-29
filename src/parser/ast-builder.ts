@@ -49,6 +49,9 @@ export class ASTBuilder {
     // Apply layout
     this.applyLayout(graph);
 
+    // Update connection anchors after layout
+    this.updateConnectionAnchors(graph);
+
     return graph;
   }
 
@@ -82,6 +85,10 @@ export class ASTBuilder {
       if (parsedNode.properties.scale) {
         const scale = this.parseScale(parsedNode.properties.scale);
         node.setScale(scale);
+      }
+      if (parsedNode.properties.position) {
+        const position = this.parsePosition(parsedNode.properties.position);
+        node.setPosition(position);
       }
     }
 
@@ -118,10 +125,11 @@ export class ASTBuilder {
       {
         nodeId: parsedConnection.target.nodeId,
         faceId: parsedConnection.target.faceId,
-      }
+      },
+      parsedConnection.label // Pass the label to constructor
     );
 
-    // Set label if provided
+    // Also set visual label if provided for backward compatibility
     if (parsedConnection.label) {
       connection.visual.label = {
         text: parsedConnection.label,
@@ -143,28 +151,40 @@ export class ASTBuilder {
    * Apply layout algorithm to position nodes
    */
   private applyLayout(graph: Graph): void {
+    // Find nodes that already have custom positions (not at origin)
+    const nodesWithCustomPositions = new Set<string>();
+    for (const node of graph.nodes.values()) {
+      const pos = node.transform.position;
+      if (pos.x !== 0 || pos.y !== 0 || pos.z !== 0) {
+        nodesWithCustomPositions.add(node.id);
+      }
+    }
+
     switch (this.config.layout.algorithm) {
       case 'hierarchical':
-        this.applyHierarchicalLayout(graph);
+        this.applyHierarchicalLayout(graph, nodesWithCustomPositions);
         break;
       case 'force-directed':
-        this.applyForceDirectedLayout(graph);
+        this.applyForceDirectedLayout(graph, nodesWithCustomPositions);
         break;
       case 'circular':
-        this.applyCircularLayout(graph);
+        this.applyCircularLayout(graph, nodesWithCustomPositions);
         break;
       case 'grid':
-        this.applyGridLayout(graph);
+        this.applyGridLayout(graph, nodesWithCustomPositions);
         break;
       default:
-        this.applyHierarchicalLayout(graph);
+        this.applyHierarchicalLayout(graph, nodesWithCustomPositions);
     }
   }
 
   /**
    * Apply hierarchical layout
    */
-  private applyHierarchicalLayout(graph: Graph): void {
+  private applyHierarchicalLayout(
+    graph: Graph,
+    nodesWithCustomPositions: Set<string> = new Set()
+  ): void {
     const rootNodes = graph.getRootNodes();
     const spacing = this.config.layout.nodeSpacing;
     const layers = new Map<number, Node[]>();
@@ -180,11 +200,20 @@ export class ASTBuilder {
       const y = layer * spacing * 2;
       maxY = Math.max(maxY, y);
 
-      const totalWidth = (nodes.length - 1) * spacing;
+      // Filter out nodes with custom positions
+      const nodesToPosition = nodes.filter(
+        (node) => !nodesWithCustomPositions.has(node.id)
+      );
+
+      if (nodesToPosition.length === 0) continue;
+
+      // Ensure minimum spacing even with fewer nodes
+      const effectiveSpacing = Math.max(spacing, 30.0);
+      const totalWidth = (nodesToPosition.length - 1) * effectiveSpacing;
       const startX = -totalWidth / 2;
 
-      nodes.forEach((node, index) => {
-        const x = startX + index * spacing;
+      nodesToPosition.forEach((node, index) => {
+        const x = startX + index * effectiveSpacing;
         const z = 0;
         node.setPosition({ x, y, z });
       });
@@ -194,14 +223,25 @@ export class ASTBuilder {
   /**
    * Apply force-directed layout (simplified)
    */
-  private applyForceDirectedLayout(graph: Graph): void {
-    const nodes = Array.from(graph.nodes.values());
-    const spacing = this.config.layout.nodeSpacing;
+  private applyForceDirectedLayout(
+    graph: Graph,
+    nodesWithCustomPositions: Set<string> = new Set()
+  ): void {
+    const allNodes = Array.from(graph.nodes.values());
+    const nodes = allNodes.filter(
+      (node) => !nodesWithCustomPositions.has(node.id)
+    );
+    const spacing = Math.max(this.config.layout.nodeSpacing, 30.0);
 
-    // Initial random positioning
+    if (nodes.length === 0) return;
+
+    // Initial random positioning with enforced spacing
     nodes.forEach((node, index) => {
       const angle = (index / nodes.length) * Math.PI * 2;
-      const radius = (spacing * nodes.length) / (Math.PI * 2);
+      const radius = Math.max(
+        (spacing * nodes.length) / (Math.PI * 2),
+        spacing * 2
+      );
 
       node.setPosition({
         x: Math.cos(angle) * radius,
@@ -217,7 +257,7 @@ export class ASTBuilder {
     const dampingFactor = 0.9;
 
     for (let i = 0; i < iterations; i++) {
-      // Apply forces between nodes
+      // Apply forces between nodes (only moveable nodes)
       for (let j = 0; j < nodes.length; j++) {
         for (let k = j + 1; k < nodes.length; k++) {
           this.applyRepulsiveForce(nodes[j], nodes[k], repulsionStrength);
@@ -228,12 +268,18 @@ export class ASTBuilder {
       for (const connection of graph.connections.values()) {
         const sourceNode = graph.getNode(connection.source.nodeId);
         const targetNode = graph.getNode(connection.target.nodeId);
-        if (sourceNode && targetNode) {
+        // Only apply forces if at least one node is moveable
+        if (
+          sourceNode &&
+          targetNode &&
+          (!nodesWithCustomPositions.has(sourceNode.id) ||
+            !nodesWithCustomPositions.has(targetNode.id))
+        ) {
           this.applyAttractiveForce(sourceNode, targetNode, attractionStrength);
         }
       }
 
-      // Apply damping
+      // Apply damping (only to moveable nodes)
       nodes.forEach((node) => {
         const pos = node.transform.position;
         node.setPosition({
@@ -248,9 +294,18 @@ export class ASTBuilder {
   /**
    * Apply circular layout
    */
-  private applyCircularLayout(graph: Graph): void {
-    const nodes = Array.from(graph.nodes.values());
-    const spacing = this.config.layout.nodeSpacing;
+  private applyCircularLayout(
+    graph: Graph,
+    nodesWithCustomPositions: Set<string> = new Set()
+  ): void {
+    const allNodes = Array.from(graph.nodes.values());
+    const nodes = allNodes.filter(
+      (node) => !nodesWithCustomPositions.has(node.id)
+    );
+    const spacing = Math.max(this.config.layout.nodeSpacing, 30.0);
+
+    if (nodes.length === 0) return;
+
     const radius = Math.max(
       (spacing * nodes.length) / (Math.PI * 2),
       spacing * 2
@@ -269,9 +324,18 @@ export class ASTBuilder {
   /**
    * Apply grid layout
    */
-  private applyGridLayout(graph: Graph): void {
-    const nodes = Array.from(graph.nodes.values());
-    const spacing = this.config.layout.nodeSpacing;
+  private applyGridLayout(
+    graph: Graph,
+    nodesWithCustomPositions: Set<string> = new Set()
+  ): void {
+    const allNodes = Array.from(graph.nodes.values());
+    const nodes = allNodes.filter(
+      (node) => !nodesWithCustomPositions.has(node.id)
+    );
+    const spacing = Math.max(this.config.layout.nodeSpacing, 30.0);
+
+    if (nodes.length === 0) return;
+
     const gridSize = Math.ceil(Math.sqrt(nodes.length));
 
     nodes.forEach((node, index) => {
@@ -396,6 +460,66 @@ export class ASTBuilder {
     }
 
     return { x: 1, y: 1, z: 1 };
+  }
+
+  /**
+   * Parse position string or array to Position3D
+   */
+  private parsePosition(positionData: any): {
+    x: number;
+    y: number;
+    z: number;
+  } {
+    // Handle array format [x, y, z]
+    if (Array.isArray(positionData) && positionData.length >= 3) {
+      return {
+        x: parseFloat(positionData[0]) || 0,
+        y: parseFloat(positionData[1]) || 0,
+        z: parseFloat(positionData[2]) || 0,
+      };
+    }
+
+    // Handle string format "x,y,z"
+    if (typeof positionData === 'string') {
+      const parts = positionData.split(',').map((s) => parseFloat(s.trim()));
+      if (parts.length >= 3) {
+        return { x: parts[0] || 0, y: parts[1] || 0, z: parts[2] || 0 };
+      }
+    }
+
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Update connection anchors after nodes have been positioned
+   */
+  private updateConnectionAnchors(graph: Graph): void {
+    for (const connection of graph.connections.values()) {
+      const sourceNode = graph.getNode(connection.source.nodeId);
+      const targetNode = graph.getNode(connection.target.nodeId);
+
+      if (sourceNode && targetNode) {
+        // Update source anchor
+        if (connection.source.faceId) {
+          const sourceFace = sourceNode.getFace(connection.source.faceId);
+          if (sourceFace) {
+            connection.source.anchor = sourceFace.center;
+          }
+        } else {
+          connection.source.anchor = sourceNode.transform.position;
+        }
+
+        // Update target anchor
+        if (connection.target.faceId) {
+          const targetFace = targetNode.getFace(connection.target.faceId);
+          if (targetFace) {
+            connection.target.anchor = targetFace.center;
+          }
+        } else {
+          connection.target.anchor = targetNode.transform.position;
+        }
+      }
+    }
   }
 
   /**

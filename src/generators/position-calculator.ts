@@ -10,7 +10,7 @@ export class PositionCalculator {
    * Calculate optimal spacing between nodes to avoid overlaps
    */
   static calculateOptimalSpacing(nodes: Node[]): number {
-    if (nodes.length === 0) return 2.0;
+    if (nodes.length === 0) return 30.0;
 
     // Find the largest node dimension
     let maxDimension = 0;
@@ -20,9 +20,15 @@ export class PositionCalculator {
       maxDimension = Math.max(maxDimension, nodeDimension);
     }
 
+    // Ensure minimum spacing even for small nodes
+    maxDimension = Math.max(maxDimension, 1.0);
+
     // Add padding based on node count
     const paddingFactor = Math.max(1.5, Math.sqrt(nodes.length) * 0.5);
-    return maxDimension * paddingFactor;
+    const calculatedSpacing = maxDimension * paddingFactor;
+
+    // Ensure minimum spacing of 20 units
+    return Math.max(calculatedSpacing, 20.0);
   }
 
   /**

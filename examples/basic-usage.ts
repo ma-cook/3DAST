@@ -4,7 +4,7 @@ import { AST3DGenerator } from '../src';
 const generator = new AST3DGenerator({
   layout: {
     algorithm: 'hierarchical',
-    nodeSpacing: 3.0,
+    nodeSpacing: 30.0,
     layers: 4,
   },
   visual: {

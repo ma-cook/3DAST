@@ -69,7 +69,7 @@ interface SceneData {
 const config = {
   layout: {
     algorithm: 'hierarchical' as const,
-    nodeSpacing: 4.0,
+    nodeSpacing: 30.0,
     layers: 5,
   },
   visual: {

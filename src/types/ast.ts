@@ -95,8 +95,8 @@ export interface AST3DGraph {
   id: string;
   name: string;
   description?: string;
-  nodes: Map<string, ASTNode>;
-  connections: Map<string, ASTConnection>;
+  nodes: ASTNode[];
+  connections: ASTConnection[];
   metadata: Record<string, any>;
   bounds: BoundingBox;
 }

@@ -57,7 +57,7 @@ export const DEFAULT_CONFIG: Config = {
   },
   layout: {
     algorithm: 'hierarchical',
-    nodeSpacing: 2.0,
+    nodeSpacing: 30.0,
     layers: 3,
   },
   visual: {

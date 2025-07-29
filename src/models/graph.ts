@@ -270,8 +270,8 @@ export class Graph {
       id: this.id,
       name: this.name,
       description: this.description,
-      nodes: this.nodes,
-      connections: this.connections,
+      nodes: Array.from(this.nodes.values()),
+      connections: Array.from(this.connections.values()),
       metadata: this.metadata,
       bounds: this.getBounds(),
     };
@@ -283,7 +283,7 @@ export class Graph {
     const graph = new Graph(data.id, data.name, data.description);
 
     // Convert ASTNode data to Node instances
-    for (const [nodeId, nodeData] of data.nodes) {
+    for (const nodeData of data.nodes) {
       const node = new Node(
         nodeData.id,
         nodeData.type,
@@ -300,7 +300,7 @@ export class Graph {
     }
 
     // Convert ASTConnection data to Connection instances
-    for (const [connectionId, connectionData] of data.connections) {
+    for (const connectionData of data.connections) {
       const connection = new Connection(
         connectionData.id,
         connectionData.type,
