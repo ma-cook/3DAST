@@ -235,6 +235,26 @@ Currently supported connection syntax:
 - `A --> B : "label"` - Alternative labeled connection syntax
 - Comments can be added after connections: `A --> B  %% description`
 
+## Nested/Container Syntax (Future Enhancement)
+
+For representing functions inside components, you could extend the syntax:
+
+```merfolk
+    %% Component with nested functions
+    UserService[Component: User Management] {
+        AuthFunction{Function: Authenticate User}
+        ValidateFunction{Function: Validate Credentials}
+        CacheFunction{Function: Cache Session}
+    }
+
+    %% Alternative syntax
+    UserService[Component: User Management]
+    UserService.AuthFunction{Function: Authenticate User}
+    UserService.ValidateFunction{Function: Validate Credentials}
+```
+
+**Note**: This syntax is not yet implemented - implement nesting in your application for now.
+
 ## Configuration Tips
 
 For best visualization results:
@@ -277,5 +297,41 @@ const processedObjects = astData.nodes.map((node) => ({
 const connectionLines = astData.connections.map((conn) => ({
   start: [conn.source.anchor.x, conn.source.anchor.y, conn.source.anchor.z],
   end: [conn.target.anchor.x, conn.target.anchor.y, conn.target.anchor.z],
+  label: conn.label, // Include connection labels
 }));
+
+// Example: Group functions inside components (application-level)
+function groupNodesByContainer(nodes) {
+  const components = nodes.filter((node) => node.geometry === 'cube');
+  const functions = nodes.filter((node) => node.geometry === 'tetrahedron');
+
+  return components.map((component) => {
+    // Find functions that logically belong to this component
+    const childFunctions = functions.filter(
+      (func) =>
+        func.name.toLowerCase().includes(component.name.toLowerCase()) ||
+        // Add your own grouping logic here
+        func.metadata?.parentComponent === component.id
+    );
+
+    return {
+      container: {
+        ...component,
+        type: 'dodecahedron', // Render as dodecahedron container
+        scale: calculateContainerSize(childFunctions),
+      },
+      children: childFunctions,
+      type: 'container',
+    };
+  });
+}
+
+function calculateContainerSize(children) {
+  const childCount = children.length;
+  const baseSize = 2; // Base scale for empty container
+  const sizePerChild = 0.5; // Additional scale per child
+
+  const scale = baseSize + childCount * sizePerChild;
+  return [scale, scale, scale];
+}
 ```

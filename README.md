@@ -5,7 +5,7 @@ A TypeScript library for parsing Merfolk syntax and generating 3D abstract synta
 ## Features
 
 - 🎯 **Merfolk Syntax**: Familiar, easy-to-write syntax for defining nodes and connections
-- 🧊 **Multiple 3D Geometries**: Cubes, dodecahedrons, and planes
+- 🧊 **Multiple 3D Geometries**: Cubes, tetrahedrons, and dodecahedrons
 - 🔗 **Face-specific Connections**: Connect to specific faces of 3D objects
 - 📐 **Smart Layout Algorithms**: Hierarchical, force-directed, circular, and grid layouts
 - 🎨 **Customizable Visuals**: Themes, colors, materials, and styling options
@@ -26,15 +26,19 @@ import { MarkdownProcessor, AST3DGenerator } from '3d-ast-generator';
 const generator = new AST3DGenerator();
 
 const syntax = `
-graph3d "My Application"
+%% My Application Architecture
+App{Component: Main Application}
+DataService[Function: Process Data]
+UserInterface{Component: User Interface}
+Database[[Store: Database]]
+ThreeJS<Library: Three.js>
 
-A[Function: processData]
-B{Component: UserInterface}  
-C<Datapath: Database>
-
-A --> B : "processed data"
-B -.-> A : "user events"
-A --> C : "queries"
+%% Data flow connections
+App --> UserInterface : "renders"
+App --> DataService : "uses"
+DataService --> Database : "queries"
+UserInterface --> App : "user events"
+App --> ThreeJS : "3D rendering"
 `;
 
 const graph = generator.generate(syntax);
@@ -54,8 +58,13 @@ const processor = new MarkdownProcessor({
 const markdownContent = `
 # My Architecture
 \`\`\`merfolk
-graph3d "System Overview"
-A[Function: API] --> B{Component: UI}
+%% System Overview
+API[Function: API Server]
+UI{Component: User Interface}
+Database[[Store: Database]]
+
+API --> UI : "data"
+API --> Database : "queries"
 \`\`\`
 `;
 
@@ -72,22 +81,28 @@ diagrams.forEach((diagram) => {
 
 ### Node Types & Geometries
 
-| Syntax               | Type      | Geometry     | Use Case               |
-| -------------------- | --------- | ------------ | ---------------------- |
-| `A[Function: name]`  | Function  | Cube         | Functions, methods     |
-| `B{Component: name}` | Component | Dodecahedron | UI components, modules |
-| `C<Datapath: name>`  | Datapath  | Plane        | Data flows, streams    |
+| Syntax               | Type      | Geometry     | Use Case                  |
+| -------------------- | --------- | ------------ | ------------------------- |
+| `A{Component: name}` | Component | Dodecahedron | Components, modules       |
+| `B[Function: name]`  | Function  | Cube         | Functions, methods        |
+| `C[[Store: name]]`   | Store     | Cube         | Databases, data stores    |
+| `D((Service: name))` | Service   | Tetrahedron  | External services, APIs   |
+| `E<Library: name>`   | Library   | Cube         | External libraries        |
+| `F[Hook: name]`      | Hook      | Cube         | React hooks, custom hooks |
 
-**Note**: Use `<Datapath: name>` instead of `((Module: name))` for plane geometry.
+**Node Type Detection**: The 3D AST generator automatically detects node types based on the bracket style and content label (e.g., "Component:", "Function:", "Store:", "Hook:", etc.).
 
 ### Connection Types
 
 | Syntax     | Type         | Style        | Use Case                 |
-| ---------- | ------------ | ------------ | ------------------------ |
+| ---------- | ------------ | ------------ | ------------------------ | ----------- | ----------------- |
 | `A --> B`  | Data Flow    | Solid arrow  | Data passing             |
+| `A -->     | "label"      | B`           | Labeled Flow             | Solid arrow | Labeled data flow |
 | `A -.-> B` | Control Flow | Dashed arrow | Event/control flow       |
 | `A --- B`  | Association  | Solid line   | General relationships    |
 | `A == B`   | Inheritance  | Thick line   | Inheritance/dependencies |
+
+**Labeled Connections**: Use `-->|"label"|` syntax to add descriptive labels to connections, which will be displayed on the 3D connection lines.
 
 ### Face Connections
 
@@ -110,6 +125,29 @@ C@top --> D@bottom : "vertical flow"
 A --> B : "Connection Label"
 C{Component: MyComp} {color: "blue", scale: "2,1,1"}
 ```
+
+### Nested Grouping (Automatic)
+
+The 3D AST generator automatically creates nested grouping when functions are connected to components:
+
+```merfolk
+%% Define components and functions
+UserService{Component: User Service}
+AuthService{Component: Authentication Service}
+
+validateUser[Function: User Validation]
+authenticateToken[Function: Token Authentication]
+
+%% Connect functions to components (creates nesting)
+validateUser --> UserService : "validates"
+authenticateToken --> AuthService : "authenticates"
+```
+
+**Result**: Functions automatically become nested inside their connected components:
+
+- Components become **containers** with increased scale
+- Functions are positioned **inside** their parent components
+- Parent-child relationships are tracked in the data structure
 
 ## Configuration
 
@@ -256,9 +294,13 @@ import { MarkdownProcessor } from '3d-ast-generator';
 const processor = new MarkdownProcessor();
 const markdownContent = `
 \`\`\`merfolk
-graph3d "My System"
-A[Function: WebServer] --> B{Component: Database}
-C<Datapath: APIGateway> --> A
+%% My System Architecture
+WebServer[Function: Web Server]
+Database{Component: Database Service}
+APIGateway((Service: API Gateway))
+
+APIGateway --> WebServer : "routes requests"
+WebServer --> Database : "queries data"
 \`\`\`
 `;
 
@@ -286,11 +328,8 @@ diagrams.forEach((diagram, diagramIndex) => {
         case 'dodecahedron':
           geometry = new THREE.DodecahedronGeometry(1);
           break;
-        case 'plane':
-          geometry = new THREE.PlaneGeometry(
-            node.transform.scale.x,
-            node.transform.scale.y
-          );
+        case 'tetrahedron':
+          geometry = new THREE.TetrahedronGeometry(1);
           break;
       }
 
@@ -496,23 +535,100 @@ Your markdown files should contain Merfolk code blocks:
 This document describes our system architecture.
 
 \`\`\`merfolk
-graph3d "System Overview"
+%% System Overview
+WebServer[Function: Web Server]
+Database{Component: Database Service}
+APIGateway((Service: API Gateway))
+Cache[Function: Cache System]
 
-A[Function: WebServer] --> B{Component: Database}
-C<Datapath: APIGateway> --> A
-B --> D[Function: Cache]
+APIGateway --> WebServer : "routes requests"
+WebServer --> Database : "queries data"
+Database --> Cache : "caches results"
 \`\`\`
 
 ## Data Flow
 
 \`\`\`merfolk  
-graph3d "User Registration"
+%% User Registration Flow
+SignupForm{Component: Signup Form}
+UserAPI[Function: User API]
+UserDB[[Store: User Database]]
+EmailService((Service: Email Service))
 
-FORM[Component: SignupForm] --> API[Function: UserAPI]
-API --> DB[Function: UserDB]
-API -.-> EMAIL[Function: EmailService]
+SignupForm --> UserAPI : "submits form"
+UserAPI --> UserDB : "stores user"
+UserAPI -.-> EmailService : "sends welcome email"
 \`\`\`
 ```
+
+### Complete Syntax Example
+
+Here's a comprehensive example showing all geometry types and connection features:
+
+```markdown
+\`\`\`merfolk
+%% Complete Application Architecture
+%% Components (Dodecahedrons, can become containers for functions)
+App{Component: Main Application}
+UI{Component: User Interface}
+API{Component: API Gateway}
+
+%% Functions (Cubes, can be nested in components)
+processData[Function: Data Processing]
+validateUser[Function: User Validation]
+renderUI[Function: UI Rendering]
+
+%% Hooks (Cubes, for React hooks and custom hooks)
+useAuth[Hook: useAuth]
+useForm[Hook: useForm]
+useTheme[Hook: useTheme]
+
+%% Stores (Cubes)
+UserDB[[Store: User Database]]
+ConfigDB[[Store: Configuration Store]]
+
+%% External Services (Tetrahedrons)
+PaymentAPI((Service: Payment Gateway))
+EmailService((Service: Email Provider))
+
+%% Libraries (Cubes)
+ReactLib<Library: React>
+ExpressLib<Library: Express.js>
+
+%% Labeled connections with nested grouping
+processData --> API : "processes requests"
+validateUser --> API : "validates tokens"
+renderUI --> UI : "renders components"
+
+%% Hook connections
+useAuth --> UI : "provides auth state"
+useForm --> UI : "manages form state"
+useTheme --> UI : "provides theme"
+
+%% Component connections
+App --> UI : "renders"
+App --> API : "calls"
+API --> UserDB : "queries"
+API --> PaymentAPI : "payment processing"
+API -.-> EmailService : "notifications"
+
+%% Library dependencies  
+UI --> ReactLib : "uses"
+API --> ExpressLib : "uses"
+
+%% Face-specific connections
+App@front --> UI@back : "direct rendering"
+API@top --> UserDB@bottom : "data flow"
+\`\`\`
+```
+
+**Result**: This creates:
+
+- **Nested grouping**: Functions automatically nest inside their connected components
+- **Multi-geometry**: 3 different 3D shapes (cubes, dodecahedrons, tetrahedrons)
+- **Hooks support**: React hooks and custom hooks as cubes with pink color (#E91E63)
+- **Labeled connections**: Descriptive labels on connection lines
+- **Face connections**: Specific face-to-face connections for precise 3D positioning
 
 ### Features
 
@@ -527,10 +643,13 @@ API -.-> EMAIL[Function: EmailService]
 
 Each Merfolk syntax element becomes a 3D object:
 
-- `[Function: name]` → **Cube mesh** with configurable color and scale
-- `{Component: name}` → **Dodecahedron mesh** for UI components
-- `<Datapath: name>` → **Plane mesh** for data flows
-- Connections → **Line geometries** between nodes
+- `{Component: name}` → **Dodecahedron mesh** (becomes container when containing functions)
+- `[Function: name]` → **Cube mesh** (can be nested inside components)
+- `[Hook: name]` → **Cube mesh** (pink #E91E63) for React hooks and custom hooks
+- `[[Store: name]]` → **Cube mesh** for databases and data stores
+- `((Service: name))` → **Tetrahedron mesh** for external services
+- `<Library: name>` → **Cube mesh** for external libraries
+- Connections → **Line geometries** between nodes with optional labels
 - Face connections → **Precise face-to-face connections**
 
 ### Complete Example

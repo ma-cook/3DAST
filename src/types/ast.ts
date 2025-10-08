@@ -12,6 +12,10 @@ import {
 export enum NodeType {
   FUNCTION = 'function',
   COMPONENT = 'component',
+  STORE = 'store',
+  SERVICE = 'service',
+  LIBRARY = 'library',
+  HOOK = 'hook',
   DATAPATH = 'datapath',
   MODULE = 'module',
   CLASS = 'class',

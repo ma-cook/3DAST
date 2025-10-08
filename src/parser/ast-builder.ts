@@ -3,6 +3,7 @@ import { Node } from '../models/node';
 import { Connection } from '../models/connection';
 import { ParsedGraph, ParsedNode, ParsedConnection } from './mermaid-parser';
 import { Config, DEFAULT_CONFIG } from '../types/config';
+import { GeometryType } from '../types/geometry';
 
 /**
  * Builds 3D AST Graph from parsed Merfolk syntax
@@ -45,6 +46,9 @@ export class ASTBuilder {
         graph.addConnection(connection);
       }
     }
+
+    // Apply nested grouping logic for functions inside components
+    this.applyNestedGrouping(graph, nodeMap);
 
     // Apply layout
     this.applyLayout(graph);
@@ -488,6 +492,164 @@ export class ASTBuilder {
     }
 
     return { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Apply nested grouping logic for functions inside components
+   */
+  private applyNestedGrouping(graph: Graph, nodeMap: Map<string, Node>): void {
+    const components = Array.from(nodeMap.values()).filter(
+      (node) => node.geometry === GeometryType.CUBE && node.type === 'component'
+    );
+    const functions = Array.from(nodeMap.values()).filter(
+      (node) =>
+        node.geometry === GeometryType.DODECAHEDRON && node.type === 'function'
+    );
+
+    // Group functions by their logical parent component
+    const componentGroups = new Map<
+      string,
+      { component: Node; functions: Node[] }
+    >();
+
+    components.forEach((component) => {
+      const relatedFunctions = this.findRelatedFunctions(
+        component,
+        functions,
+        graph
+      );
+      if (relatedFunctions.length > 0) {
+        componentGroups.set(component.id, {
+          component,
+          functions: relatedFunctions,
+        });
+      }
+    });
+
+    // Apply nested positioning and sizing
+    componentGroups.forEach((group) => {
+      this.createNestedGroup(group.component, group.functions);
+    });
+  }
+
+  /**
+   * Find functions that should be nested inside a component
+   */
+  private findRelatedFunctions(
+    component: Node,
+    functions: Node[],
+    graph: Graph
+  ): Node[] {
+    const related: Node[] = [];
+
+    functions.forEach((func) => {
+      // Check if function name suggests it belongs to this component
+      const componentName = component.name.toLowerCase();
+      const functionName = func.name.toLowerCase();
+
+      // Strategy 1: Name-based matching (e.g., "UserService" contains "AuthFunction")
+      if (
+        functionName.includes(componentName.replace(/[^a-z]/g, '')) ||
+        componentName.includes(functionName.replace(/[^a-z]/g, ''))
+      ) {
+        related.push(func);
+        return;
+      }
+
+      // Strategy 2: Connection-based matching (functions connected to this component)
+      const connections = Array.from(graph.connections.values());
+      const isConnected = connections.some(
+        (conn) =>
+          (conn.source.nodeId === component.id &&
+            conn.target.nodeId === func.id) ||
+          (conn.source.nodeId === func.id &&
+            conn.target.nodeId === component.id)
+      );
+
+      if (isConnected) {
+        related.push(func);
+      }
+    });
+
+    return related;
+  }
+
+  /**
+   * Create nested positioning for functions inside a component
+   */
+  private createNestedGroup(component: Node, functions: Node[]): void {
+    if (functions.length === 0) return;
+
+    // Calculate container size based on function count
+    const containerScale = this.calculateContainerSize(functions.length);
+    component.setScale(containerScale);
+
+    // Mark component as container using the new semantic properties
+    const functionIds = functions.map((func) => func.id);
+    component.setAsContainer(functionIds);
+
+    // Position functions inside the component
+    this.positionFunctionsInContainer(component, functions);
+
+    // Set up parent-child relationships for functions
+    functions.forEach((func) => {
+      // Set semantic parent relationship
+      func.setParent(component.id);
+
+      // Legacy metadata for backward compatibility
+      func.metadata.isNested = true;
+      func.metadata.parentContainer = component.id;
+    });
+  }
+  /**
+   * Calculate container size based on the number of child functions
+   */
+  private calculateContainerSize(childCount: number): {
+    x: number;
+    y: number;
+    z: number;
+  } {
+    const baseSize = 3; // Base scale for container
+    const sizePerChild = 0.8; // Additional scale per child
+    const scale = baseSize + childCount * sizePerChild;
+
+    return { x: scale, y: scale, z: scale };
+  }
+
+  /**
+   * Position functions inside their container component
+   */
+  private positionFunctionsInContainer(
+    container: Node,
+    functions: Node[]
+  ): void {
+    const containerPos = container.transform.position;
+    const containerScale = container.transform.scale;
+
+    // Create a grid layout inside the container
+    const gridSize = Math.ceil(Math.sqrt(functions.length));
+    const spacing =
+      Math.min(containerScale.x, containerScale.y, containerScale.z) * 0.4; // 40% of container size
+
+    functions.forEach((func, index) => {
+      const row = Math.floor(index / gridSize);
+      const col = index % gridSize;
+
+      // Calculate relative position within container
+      const offsetX = (col - (gridSize - 1) / 2) * spacing;
+      const offsetY = 0.5; // Slightly elevated inside container
+      const offsetZ = (row - (gridSize - 1) / 2) * spacing;
+
+      // Set absolute position relative to container
+      func.setPosition({
+        x: containerPos.x + offsetX,
+        y: containerPos.y + offsetY,
+        z: containerPos.z + offsetZ,
+      });
+
+      // Scale down functions to fit inside container
+      func.setScale({ x: 0.7, y: 0.7, z: 0.7 });
+    });
   }
 
   /**

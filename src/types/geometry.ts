@@ -39,8 +39,8 @@ export interface Transform3D {
  */
 export enum GeometryType {
   CUBE = 'cube',
+  TETRAHEDRON = 'tetrahedron',
   DODECAHEDRON = 'dodecahedron',
-  PLANE = 'plane',
 }
 
 /**

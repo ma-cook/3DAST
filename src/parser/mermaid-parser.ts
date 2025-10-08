@@ -294,6 +294,16 @@ export class MermaidParser {
       case 'component':
       case 'comp':
         return NodeType.COMPONENT;
+      case 'store':
+        return NodeType.STORE;
+      case 'service':
+      case 'svc':
+        return NodeType.SERVICE;
+      case 'library':
+      case 'lib':
+        return NodeType.LIBRARY;
+      case 'hook':
+        return NodeType.HOOK;
       case 'datapath':
       case 'data':
         return NodeType.DATAPATH;
@@ -319,12 +329,25 @@ export class MermaidParser {
    * Parse geometry from line (based on bracket type)
    */
   private parseGeometry(line: string): GeometryType {
+    // [Function: name] -> CUBE
     if (line.includes('[') && line.includes(']')) {
       return GeometryType.CUBE;
-    } else if (line.includes('{') && line.includes('}')) {
+    }
+    // {Component: name} -> DODECAHEDRON
+    else if (line.includes('{') && line.includes('}')) {
       return GeometryType.DODECAHEDRON;
-    } else if (line.includes('<') && line.includes('>')) {
-      return GeometryType.PLANE;
+    }
+    // [[Store: name]] -> CUBE
+    else if (line.includes('[[') && line.includes(']]')) {
+      return GeometryType.CUBE;
+    }
+    // ((Service: name)) -> TETRAHEDRON
+    else if (line.includes('((') && line.includes('))')) {
+      return GeometryType.TETRAHEDRON;
+    }
+    // <Library: name> -> CUBE
+    else if (line.includes('<') && line.includes('>')) {
+      return GeometryType.CUBE;
     }
 
     return GeometryType.CUBE; // Default

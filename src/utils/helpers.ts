@@ -234,6 +234,10 @@ export class Helpers {
     const displayNames: Record<NodeType, string> = {
       [NodeType.FUNCTION]: 'Function',
       [NodeType.COMPONENT]: 'Component',
+      [NodeType.STORE]: 'Store',
+      [NodeType.SERVICE]: 'Service',
+      [NodeType.LIBRARY]: 'Library',
+      [NodeType.HOOK]: 'Hook',
       [NodeType.DATAPATH]: 'Data Path',
       [NodeType.MODULE]: 'Module',
       [NodeType.CLASS]: 'Class',
@@ -266,8 +270,8 @@ export class Helpers {
   static getGeometryTypeDisplayName(type: GeometryType): string {
     const displayNames: Record<GeometryType, string> = {
       [GeometryType.CUBE]: 'Cube',
+      [GeometryType.TETRAHEDRON]: 'Tetrahedron',
       [GeometryType.DODECAHEDRON]: 'Dodecahedron',
-      [GeometryType.PLANE]: 'Plane',
     };
 
     return displayNames[type] || 'Unknown';
