@@ -29,6 +29,18 @@ export interface ParsedConnection {
   };
   label?: string;
   properties?: Record<string, any>;
+  flowPaths?: string[]; // IDs of flow paths this connection belongs to
+}
+
+/**
+ * Parsed flow path definition
+ */
+export interface ParsedFlowPath {
+  id: string;
+  name: string;
+  nodeSequence: string[];
+  connectionIds: string[];
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -39,6 +51,7 @@ export interface ParsedGraph {
   description?: string;
   nodes: ParsedNode[];
   connections: ParsedConnection[];
+  flowPaths: ParsedFlowPath[];
   metadata?: Record<string, any>;
 }
 
@@ -50,8 +63,10 @@ export class MermaidParser {
   private currentLine = 0;
   private nodes: ParsedNode[] = [];
   private connections: ParsedConnection[] = [];
+  private flowPaths: ParsedFlowPath[] = [];
   private nodeIdCounter = 0;
   private connectionIdCounter = 0;
+  private flowPathIdCounter = 0;
 
   /**
    * Parse Merfolk syntax into graph structure
@@ -100,6 +115,15 @@ export class MermaidParser {
         continue;
       }
 
+      // Parse flow path definitions
+      if (line.startsWith('flowpath ')) {
+        const flowPath = this.parseFlowPathDefinition(line);
+        if (flowPath) {
+          this.flowPaths.push(flowPath);
+        }
+        continue;
+      }
+
       // Parse node definition
       if (this.isNodeDefinition(line)) {
         const node = this.parseNodeDefinition(line);
@@ -134,6 +158,7 @@ export class MermaidParser {
       description,
       nodes: this.nodes,
       connections: this.connections,
+      flowPaths: this.flowPaths,
       metadata,
     };
   }
@@ -146,8 +171,10 @@ export class MermaidParser {
     this.currentLine = 0;
     this.nodes = [];
     this.connections = [];
+    this.flowPaths = [];
     this.nodeIdCounter = 0;
     this.connectionIdCounter = 0;
+    this.flowPathIdCounter = 0;
   }
   /**
    * Check if line is a node definition
@@ -187,12 +214,13 @@ export class MermaidParser {
     // D<Datapath: eventStream>
     // E[[Class: UserModel]]
 
+    // IMPORTANT: Order matters! Check double brackets BEFORE single brackets
     const patterns = [
+      /^([A-Za-z0-9_]+)\[\[([^:]+):\s*([^\]]+)\]\]/, // Double square brackets (must be first!)
+      /^([A-Za-z0-9_]+)\(\(([^:]+):\s*([^\)]+)\)\)/, // Double parentheses (must be before single)
       /^([A-Za-z0-9_]+)\[([^:]+):\s*([^\]]+)\]/, // Square brackets
       /^([A-Za-z0-9_]+)\{([^:]+):\s*([^\}]+)\}/, // Curly brackets
-      /^([A-Za-z0-9_]+)\(\(([^:]+):\s*([^\)]+)\)\)/, // Double parentheses
       /^([A-Za-z0-9_]+)<([^:]+):\s*([^>]+)>/, // Angle brackets
-      /^([A-Za-z0-9_]+)\[\[([^:]+):\s*([^\]]+)\]\]/, // Double square brackets
     ];
 
     for (const pattern of patterns) {
@@ -240,6 +268,20 @@ export class MermaidParser {
     // A --> B@front
     // A@back --> B@top
     // A -->|"label"| B (Mermaid-style labeled connections)
+    // A --> B : "data flow" #myFlowPath (tagged with flow path)
+    // A --> B #flow1 #flow2 (multiple flow path tags)
+
+    // Extract flow path tags (e.g. #myFlow #anotherFlow) from end of line
+    const flowPathTags: string[] = [];
+    let cleanLine = line;
+    const tagMatches = line.match(/#([A-Za-z0-9_-]+)/g);
+    if (tagMatches) {
+      for (const tag of tagMatches) {
+        flowPathTags.push(tag.substring(1)); // Remove the # prefix
+      }
+      // Remove flow path tags from the line for normal parsing
+      cleanLine = line.replace(/\s*#[A-Za-z0-9_-]+/g, '').trim();
+    }
 
     const patterns = [
       // Pattern for -->|"label"| syntax (Mermaid-style)
@@ -249,7 +291,7 @@ export class MermaidParser {
     ];
 
     for (const pattern of patterns) {
-      const match = line.match(pattern);
+      const match = cleanLine.match(pattern);
       if (match) {
         let sourceId, sourceFace, arrow, targetId, targetFace, label;
 
@@ -276,6 +318,7 @@ export class MermaidParser {
           },
           label,
           properties: {},
+          flowPaths: flowPathTags.length > 0 ? flowPathTags : undefined,
         };
       }
     }
@@ -331,21 +374,23 @@ export class MermaidParser {
    * Parse geometry from line (based on bracket type)
    */
   private parseGeometry(line: string): GeometryType {
-    // [Function: name] -> CUBE
-    if (line.includes('[') && line.includes(']')) {
+    // IMPORTANT: Check double brackets BEFORE single brackets!
+    
+    // [[Store: name]] -> CUBE (must check BEFORE single brackets)
+    if (line.includes('[[') && line.includes(']]')) {
+      return GeometryType.CUBE;
+    }
+    // ((Service: name)) -> TETRAHEDRON (must check BEFORE single parens)
+    else if (line.includes('((') && line.includes('))')) {
+      return GeometryType.TETRAHEDRON;
+    }
+    // [Function: name] or [Hook: name] -> CUBE
+    else if (line.includes('[') && line.includes(']')) {
       return GeometryType.CUBE;
     }
     // {Component: name} -> DODECAHEDRON
     else if (line.includes('{') && line.includes('}')) {
       return GeometryType.DODECAHEDRON;
-    }
-    // [[Store: name]] -> CUBE
-    else if (line.includes('[[') && line.includes(']]')) {
-      return GeometryType.CUBE;
-    }
-    // ((Service: name)) -> TETRAHEDRON
-    else if (line.includes('((') && line.includes('))')) {
-      return GeometryType.TETRAHEDRON;
     }
     // <Library: name> -> CUBE
     else if (line.includes('<') && line.includes('>')) {
@@ -451,5 +496,83 @@ export class MermaidParser {
     }
 
     return properties;
+  }
+
+  /**
+   * Parse a flow path definition line.
+   *
+   * Syntax:
+   *   flowpath "name" : A --> B --> C --> D
+   *   flowpath "name" : A --> B --> C --> D : "description"
+   *   flowpath "name" (-->|-.->|---|==) : A --> B --> C
+   *
+   * This creates individual connections between each adjacent pair of nodes,
+   * all tagged with the same flow path ID, enabling full data-path tracing.
+   */
+  private parseFlowPathDefinition(line: string): ParsedFlowPath | null {
+    // Match: flowpath "name" : A --> B --> C --> D
+    // Optional arrow type override: flowpath "name" (-->) : A --> B --> C
+    // Optional trailing description: ... : "description"
+    const flowPathMatch = line.match(
+      /^flowpath\s+['""]([^'"]+)['""](?:\s*\(([^)]+)\))?\s*:\s*(.+?)(?:\s*:\s*['""]([^'"]+)['""])?$/
+    );
+    if (!flowPathMatch) return null;
+
+    const [, name, arrowOverride, pathPart, description] = flowPathMatch;
+
+    // Parse the node chain: A --> B --> C --> D
+    // We split on arrow patterns to extract the node IDs
+    const nodeIds = pathPart
+      .split(/\s*(?:-->|-.->|---|==)\s*/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (nodeIds.length < 2) return null;
+
+    const flowPathId = `flowpath_${this.flowPathIdCounter++}`;
+    const connectionType = arrowOverride
+      ? this.parseConnectionType(arrowOverride.trim())
+      : ConnectionType.DATA_FLOW;
+
+    // Create connections for each adjacent pair, all tagged with this flow path
+    const connectionIds: string[] = [];
+    for (let i = 0; i < nodeIds.length - 1; i++) {
+      const connId = `conn_${this.connectionIdCounter++}`;
+      connectionIds.push(connId);
+
+      // Check if there's already a connection between these two nodes
+      const existingConn = this.connections.find(
+        (c) =>
+          c.source.nodeId === nodeIds[i] && c.target.nodeId === nodeIds[i + 1]
+      );
+
+      if (existingConn) {
+        // Tag the existing connection with this flow path
+        if (!existingConn.flowPaths) {
+          existingConn.flowPaths = [];
+        }
+        existingConn.flowPaths.push(name);
+        connectionIds[connectionIds.length - 1] = existingConn.id;
+      } else {
+        // Create a new connection
+        this.connections.push({
+          id: connId,
+          type: connectionType,
+          source: { nodeId: nodeIds[i] },
+          target: { nodeId: nodeIds[i + 1] },
+          label: undefined,
+          properties: {},
+          flowPaths: [name],
+        });
+      }
+    }
+
+    return {
+      id: flowPathId,
+      name,
+      nodeSequence: nodeIds,
+      connectionIds,
+      metadata: description ? { description } : undefined,
+    };
   }
 }

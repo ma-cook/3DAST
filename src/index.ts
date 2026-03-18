@@ -10,6 +10,12 @@ export { Graph } from './models/graph';
 
 // Parser
 export { MermaidParser } from './parser/mermaid-parser';
+export type {
+  ParsedNode,
+  ParsedConnection,
+  ParsedFlowPath,
+  ParsedGraph,
+} from './parser/mermaid-parser';
 export { ASTBuilder } from './parser/ast-builder';
 
 // Main generator class

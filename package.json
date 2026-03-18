@@ -1,6 +1,6 @@
 {
   "name": "3d-ast-generator",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "A TypeScript library for parsing Merfolk syntax and generating 3D abstract syntax trees for visualization",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -26,7 +26,7 @@
     "parser",
     "typescript"
   ],
-  "author": "3D AST Generator Team",
+  "author": "Mitchell Cook",
   "license": "MIT",
   "dependencies": {
     "commander": "^11.0.0"

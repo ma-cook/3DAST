@@ -128,6 +128,14 @@ E --- C : "model mapping"
 
 %% Face-specific connections
 A@front --> B@back : "direct connection"
-C@top --> E@bottom : "inheritance"`;
+C@top --> E@bottom : "inheritance"
+
+%% Flow path tags on individual connections
+A --> B : "data" #userDataFlow
+B --> D : "events" #userDataFlow #eventFlow
+
+%% Flow path definitions (auto-creates tagged connections)
+flowpath "requestLifecycle" : B --> A --> C --> E
+flowpath "eventPipeline" (-.->): D --> A --> B : "end-to-end event flow"`;
   }
 }

@@ -22,6 +22,7 @@ export class Connection {
   public visual: VisualProperties;
   public metadata: Record<string, any>;
   public waypoints: Position3D[];
+  public flowPaths: string[]; // Flow path IDs this connection belongs to
 
   constructor(
     id: string,
@@ -41,6 +42,30 @@ export class Connection {
     };
     this.metadata = {};
     this.waypoints = [];
+    this.flowPaths = [];
+  }
+
+  /**
+   * Add this connection to a flow path
+   */
+  addFlowPath(flowPathId: string): void {
+    if (!this.flowPaths.includes(flowPathId)) {
+      this.flowPaths.push(flowPathId);
+    }
+  }
+
+  /**
+   * Remove this connection from a flow path
+   */
+  removeFlowPath(flowPathId: string): void {
+    this.flowPaths = this.flowPaths.filter((id) => id !== flowPathId);
+  }
+
+  /**
+   * Check if this connection belongs to a specific flow path
+   */
+  belongsToFlowPath(flowPathId: string): boolean {
+    return this.flowPaths.includes(flowPathId);
   }
 
   /**

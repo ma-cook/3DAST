@@ -1,5 +1,5 @@
 import { Position3D, BoundingBox } from '../types/geometry';
-import { AST3DGraph } from '../types/ast';
+import { AST3DGraph, FlowPath } from '../types/ast';
 import { Node } from './node';
 import { Connection } from './connection';
 
@@ -12,6 +12,7 @@ export class Graph {
   public description?: string;
   public nodes: Map<string, Node>;
   public connections: Map<string, Connection>;
+  public flowPaths: Map<string, FlowPath>;
   public metadata: Record<string, any>;
 
   constructor(id: string, name: string, description?: string) {
@@ -20,6 +21,7 @@ export class Graph {
     this.description = description;
     this.nodes = new Map();
     this.connections = new Map();
+    this.flowPaths = new Map();
     this.metadata = {};
   }
 
@@ -187,6 +189,115 @@ export class Graph {
   }
 
   /**
+   * Add a flow path to the graph
+   */
+  addFlowPath(flowPath: FlowPath): void {
+    this.flowPaths.set(flowPath.id, flowPath);
+
+    // Tag all connections in the path
+    for (const connId of flowPath.connectionIds) {
+      const connection = this.connections.get(connId);
+      if (connection) {
+        connection.addFlowPath(flowPath.name);
+      }
+    }
+  }
+
+  /**
+   * Remove a flow path from the graph
+   */
+  removeFlowPath(flowPathId: string): void {
+    const flowPath = this.flowPaths.get(flowPathId);
+    if (!flowPath) return;
+
+    // Untag connections
+    for (const connId of flowPath.connectionIds) {
+      const connection = this.connections.get(connId);
+      if (connection) {
+        connection.removeFlowPath(flowPath.name);
+      }
+    }
+
+    this.flowPaths.delete(flowPathId);
+  }
+
+  /**
+   * Get a flow path by ID
+   */
+  getFlowPath(flowPathId: string): FlowPath | undefined {
+    return this.flowPaths.get(flowPathId);
+  }
+
+  /**
+   * Get a flow path by name
+   */
+  getFlowPathByName(name: string): FlowPath | undefined {
+    return Array.from(this.flowPaths.values()).find((fp) => fp.name === name);
+  }
+
+  /**
+   * Get all flow paths
+   */
+  getAllFlowPaths(): FlowPath[] {
+    return Array.from(this.flowPaths.values());
+  }
+
+  /**
+   * Get all connections that belong to a specific flow path (by name)
+   */
+  getFlowPathConnections(flowPathName: string): Connection[] {
+    return Array.from(this.connections.values()).filter((conn) =>
+      conn.belongsToFlowPath(flowPathName)
+    );
+  }
+
+  /**
+   * Get all flow paths that pass through a specific node
+   */
+  getNodeFlowPaths(nodeId: string): FlowPath[] {
+    return Array.from(this.flowPaths.values()).filter((fp) =>
+      fp.nodeSequence.includes(nodeId)
+    );
+  }
+
+  /**
+   * Trace the complete data path for a flow: returns ordered nodes and connections
+   */
+  traceFlowPath(flowPathName: string): {
+    nodes: Node[];
+    connections: Connection[];
+  } | null {
+    const flowPath = this.getFlowPathByName(flowPathName);
+    if (!flowPath) return null;
+
+    const nodes: Node[] = [];
+    const connections: Connection[] = [];
+
+    for (const nodeId of flowPath.nodeSequence) {
+      const node = this.nodes.get(nodeId);
+      if (node) nodes.push(node);
+    }
+
+    for (const connId of flowPath.connectionIds) {
+      const conn = this.connections.get(connId);
+      if (conn) connections.push(conn);
+    }
+
+    return { nodes, connections };
+  }
+
+  /**
+   * Get all flow paths between two nodes (not just direct — any path that includes both)
+   */
+  getFlowPathsBetween(nodeIdA: string, nodeIdB: string): FlowPath[] {
+    return Array.from(this.flowPaths.values()).filter((fp) => {
+      const idxA = fp.nodeSequence.indexOf(nodeIdA);
+      const idxB = fp.nodeSequence.indexOf(nodeIdB);
+      return idxA !== -1 && idxB !== -1;
+    });
+  }
+
+  /**
    * Calculate the bounding box of the entire graph
    */
   getBounds(): BoundingBox {
@@ -272,6 +383,7 @@ export class Graph {
       description: this.description,
       nodes: Array.from(this.nodes.values()),
       connections: Array.from(this.connections.values()),
+      flowPaths: Array.from(this.flowPaths.values()),
       metadata: this.metadata,
       bounds: this.getBounds(),
     };
@@ -312,7 +424,19 @@ export class Graph {
       if (connectionData.waypoints) {
         connection.setWaypoints(connectionData.waypoints);
       }
+      if (connectionData.flowPaths) {
+        for (const fp of connectionData.flowPaths) {
+          connection.addFlowPath(fp);
+        }
+      }
       graph.addConnection(connection);
+    }
+
+    // Restore flow paths
+    if (data.flowPaths) {
+      for (const fpData of data.flowPaths) {
+        graph.flowPaths.set(fpData.id, { ...fpData });
+      }
     }
 
     graph.metadata = data.metadata;

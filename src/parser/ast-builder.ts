@@ -1,7 +1,7 @@
 import { Graph } from '../models/graph';
 import { Node } from '../models/node';
 import { Connection } from '../models/connection';
-import { ParsedGraph, ParsedNode, ParsedConnection } from './mermaid-parser';
+import { ParsedGraph, ParsedNode, ParsedConnection, ParsedFlowPath } from './mermaid-parser';
 import { Config, DEFAULT_CONFIG } from '../types/config';
 import { GeometryType } from '../types/geometry';
 
@@ -44,6 +44,19 @@ export class ASTBuilder {
       const connection = this.createConnection(parsedConnection, nodeMap);
       if (connection) {
         graph.addConnection(connection);
+      }
+    }
+
+    // Register flow paths
+    if (parsedGraph.flowPaths) {
+      for (const parsedFlowPath of parsedGraph.flowPaths) {
+        graph.addFlowPath({
+          id: parsedFlowPath.id,
+          name: parsedFlowPath.name,
+          nodeSequence: parsedFlowPath.nodeSequence,
+          connectionIds: parsedFlowPath.connectionIds,
+          metadata: parsedFlowPath.metadata,
+        });
       }
     }
 
@@ -146,6 +159,13 @@ export class ASTBuilder {
     // Apply custom properties
     if (parsedConnection.properties) {
       connection.metadata = { ...parsedConnection.properties };
+    }
+
+    // Apply flow path tags
+    if (parsedConnection.flowPaths) {
+      for (const fp of parsedConnection.flowPaths) {
+        connection.addFlowPath(fp);
+      }
     }
 
     return connection;

@@ -7,7 +7,8 @@ A TypeScript library for parsing Merfolk syntax and generating 3D abstract synta
 - 🎯 **Merfolk Syntax**: Familiar, easy-to-write syntax for defining nodes and connections
 - 🧊 **Multiple 3D Geometries**: Cubes, tetrahedrons, and dodecahedrons
 - 🔗 **Face-specific Connections**: Connect to specific faces of 3D objects
-- 📐 **Smart Layout Algorithms**: Hierarchical, force-directed, circular, and grid layouts
+- � **Flow Path Tracking**: Trace complete data paths across your entire application, not just between two nodes
+- �📐 **Smart Layout Algorithms**: Hierarchical, force-directed, circular, and grid layouts
 - 🎨 **Customizable Visuals**: Themes, colors, materials, and styling options
 - ⚡ **TypeScript Native**: Full type safety and IntelliSense support
 - 🔧 **Plugin Ready**: Designed to integrate with 3D visualization applications
@@ -135,6 +136,112 @@ A --> B : "Connection Label"
 C{Component: MyComp} {color: "blue", scale: "2,1,1"}
 ```
 
+### Flow Path Tracking
+
+Flow paths let you define and trace **complete data paths** that span multiple nodes across your application — not just individual point-to-point connections.
+
+#### The `flowpath` Directive
+
+Define a named, multi-hop data path in a single line. This auto-creates tagged connections between each adjacent pair of nodes:
+
+```
+flowpath "userDataFlow" : A --> B --> C --> D
+```
+
+This creates 3 connections (A→B, B→C, C→D), all tagged with the `userDataFlow` identifier so the entire path can be queried and traced as a unit.
+
+**Full syntax:**
+
+```
+%% Basic flow path
+flowpath "name" : NodeA --> NodeB --> NodeC
+
+%% With a custom arrow type (applies to all connections in the path)
+flowpath "eventPipeline" (-.->): Input --> Transform --> Output
+
+%% With a description
+flowpath "requestLifecycle" : Client --> API --> DB --> API --> Client : "full request cycle"
+```
+
+#### The `#tag` Syntax on Connections
+
+Tag individual connections with one or more flow path names using `#`:
+
+```
+A --> B : "payload" #userDataFlow
+B --> C #userDataFlow #auditTrail
+C --> D #auditTrail
+```
+
+This is useful when you want to manually compose flow paths from existing connections rather than auto-generating them.
+
+#### Combining Both Approaches
+
+You can freely mix `flowpath` directives with `#tag` connections. If a `flowpath` references a connection that already exists, it tags the existing connection instead of creating a duplicate:
+
+```merfolk
+%% Nodes
+UI{Component: User Interface}
+API[Function: API Handler]
+Auth[Function: Auth Service]
+DB[[Store: Database]]
+Cache[Function: Cache Layer]
+
+%% Explicit connections
+UI --> API : "request" #userFlow
+API --> Auth : "validate"
+
+%% Flow path reuses existing UI-->API connection, creates the rest
+flowpath "userFlow" : UI --> API --> Auth --> DB
+
+%% A separate flow path through the cache layer
+flowpath "cachedRead" : UI --> API --> Cache --> DB
+```
+
+#### Querying Flow Paths
+
+```typescript
+const graph = generator.generate(syntax);
+
+// Trace a complete data path — returns ordered nodes and connections
+const trace = graph.traceFlowPath('userDataFlow');
+console.log(trace.nodes.map(n => n.name));  // ['UI', 'API Handler', 'Auth Service', 'DB']
+console.log(trace.connections.length);       // 3
+
+// Which flow paths pass through a specific node?
+const apiFlows = graph.getNodeFlowPaths('API');
+console.log(apiFlows.map(fp => fp.name));    // ['userFlow', 'cachedRead']
+
+// Get all connections belonging to a flow path
+const conns = graph.getFlowPathConnections('cachedRead');
+
+// Find all flow paths that connect two nodes (even indirectly)
+const paths = graph.getFlowPathsBetween('UI', 'DB');
+console.log(paths.length);  // 2  (userFlow and cachedRead both reach from UI to DB)
+
+// List all defined flow paths
+const all = graph.getAllFlowPaths();
+```
+
+#### JSON Output
+
+Flow paths are included in `generateJSON()` output:
+
+```json
+{
+  "flowPaths": [
+    {
+      "id": "flowpath_0",
+      "name": "userDataFlow",
+      "nodeSequence": ["UI", "API", "Auth", "DB"],
+      "connectionIds": ["conn_0", "conn_1", "conn_2"]
+    }
+  ]
+}
+```
+
+Each connection also carries a `flowPaths` array listing which flow paths it belongs to, making it easy to highlight or filter connections by path in your 3D visualization.
+
 ### Nested Grouping (Automatic)
 
 The 3D AST generator automatically creates nested grouping when functions are connected to components:
@@ -211,6 +318,8 @@ import {
   NodeType,
   ConnectionType,
   GeometryType,
+  FlowPath,
+  ParsedFlowPath,
 
   // Configuration
   DEFAULT_CONFIG,
@@ -254,6 +363,7 @@ Represents a 3D AST graph with nodes and connections.
 
 - `nodes: Map<string, Node>` - All nodes in the graph
 - `connections: Map<string, Connection>` - All connections
+- `flowPaths: Map<string, FlowPath>` - All registered flow paths
 - `bounds: BoundingBox` - Overall graph bounding box
 
 #### Methods
@@ -263,6 +373,14 @@ Represents a 3D AST graph with nodes and connections.
 - `getBounds(): BoundingBox` - Calculate bounding box
 - `getRootNodes(): Node[]` - Get nodes with no parents
 - `getLeafNodes(): Node[]` - Get nodes with no children
+- `addFlowPath(flowPath: FlowPath): void` - Register a flow path
+- `removeFlowPath(flowPathId: string): void` - Remove a flow path
+- `traceFlowPath(name: string): { nodes: Node[], connections: Connection[] } | null` - Trace a complete data path
+- `getNodeFlowPaths(nodeId: string): FlowPath[]` - Get all flow paths through a node
+- `getFlowPathConnections(name: string): Connection[]` - Get connections in a flow path
+- `getFlowPathsBetween(nodeA: string, nodeB: string): FlowPath[]` - Find flow paths connecting two nodes
+- `getFlowPathByName(name: string): FlowPath | undefined` - Look up a flow path by name
+- `getAllFlowPaths(): FlowPath[]` - List all registered flow paths
 
 ### Node
 
@@ -288,6 +406,13 @@ Represents a connection between two nodes.
 - `type: ConnectionType` - Connection type
 - `waypoints: Position3D[]` - Path waypoints
 - `visual: VisualProperties` - Visual styling
+- `flowPaths: string[]` - Flow path names this connection belongs to
+
+#### Methods
+
+- `addFlowPath(name: string): void` - Tag this connection with a flow path
+- `removeFlowPath(name: string): void` - Remove a flow path tag
+- `belongsToFlowPath(name: string): boolean` - Check if connection is part of a flow path
 
 ## Integration with 3D Applications
 

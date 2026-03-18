@@ -90,6 +90,19 @@ export interface ASTConnection {
   visual: VisualProperties;
   metadata: Record<string, any>;
   waypoints?: Position3D[]; // Optional waypoints for curved connections
+  flowPaths?: string[]; // IDs of flow paths this connection belongs to
+}
+
+/**
+ * A named data flow path through the application.
+ * Tracks the ordered sequence of nodes that data travels through.
+ */
+export interface FlowPath {
+  id: string;
+  name: string;
+  nodeSequence: string[]; // Ordered node IDs in the path
+  connectionIds: string[]; // IDs of connections that form this path
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -101,6 +114,7 @@ export interface AST3DGraph {
   description?: string;
   nodes: ASTNode[];
   connections: ASTConnection[];
+  flowPaths: FlowPath[];
   metadata: Record<string, any>;
   bounds: BoundingBox;
 }
