@@ -94,15 +94,24 @@ diagrams.forEach((diagram) => {
 
 ### Connection Types
 
-| Syntax     | Type         | Style        | Use Case                 |
-| ---------- | ------------ | ------------ | ------------------------ | ----------- | ----------------- |
-| `A --> B`  | Data Flow    | Solid arrow  | Data passing             |
-| `A -->     | "label"      | B`           | Labeled Flow             | Solid arrow | Labeled data flow |
-| `A -.-> B` | Control Flow | Dashed arrow | Event/control flow       |
-| `A --- B`  | Association  | Solid line   | General relationships    |
-| `A == B`   | Inheritance  | Thick line   | Inheritance/dependencies |
+| Syntax       | Type         | Color           | Style              | Use Case                    |
+| ------------ | ------------ | --------------- | ------------------ | --------------------------- |
+| `A --> B`    | Data Flow    | `#4CAF50` green | Solid arrow        | Data passing                |
+| `A -.-> B`   | Control Flow | `#F44336` red   | Dashed arrow       | Event/control flow          |
+| `A --- B`    | Association  | `#607D8B` grey  | Solid line         | General relationships       |
+| `A == B`     | Inheritance  | `#2196F3` blue  | Thick line         | Inheritance/dependencies    |
+| `A *--> B`   | Composition  | `#FF9800` orange| ♦ filled diamond   | Whole/part containment      |
+| `A ..> B`    | Dependency   | `#9C27B0` purple| Dotted arrow       | Usage/dependency            |
 
 **Labeled Connections**: Use `-->|"label"|` syntax to add descriptive labels to connections, which will be displayed on the 3D connection lines.
+
+```
+%% Composition — Application contains AuthService
+APP *--> AUTH : "contains"
+
+%% Dependency — AuthService depends on UserDatabase
+AUTH ..> USER_DB : "reads credentials"
+```
 
 ### Face Connections
 

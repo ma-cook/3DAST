@@ -238,9 +238,16 @@ export class Validator {
     }
 
     // Connection definition
-    if (line.includes('-->') || line.includes('---') || line.includes('-.->')) {
+    if (
+      line.includes('-->') ||
+      line.includes('---') ||
+      line.includes('-.->') ||
+      line.includes('==') ||
+      line.includes('*-->') ||
+      line.includes('..>')
+    ) {
       const connectionMatch = line.match(
-        /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(-->|---|-.->)\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?/
+        /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(\*-->|-->|---|-.->|==|\.\.>)\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?/
       );
       if (connectionMatch) {
         const [, sourceId, , , targetId] = connectionMatch;
