@@ -170,7 +170,9 @@ export class MermaidParser {
       line.includes('-->') ||
       line.includes('---') ||
       line.includes('-.->') ||
-      line.includes('==')
+      line.includes('==') ||
+      line.includes('*-->') ||
+      line.includes('..>')
     );
   }
 
@@ -241,9 +243,9 @@ export class MermaidParser {
 
     const patterns = [
       // Pattern for -->|"label"| syntax (Mermaid-style)
-      /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(-->|---|-.->|==)\s*\|\s*['""]([^'"]+)['"]\s*\|\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?/,
+      /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(\*-->|-->|---|-.->|==|\.\.>)\s*\|\s*['""]([^'"]+)['"]\s*\|\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?/,
       // Pattern for : "label" syntax (original)
-      /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(-->|---|-.->|==)\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(?::\s*['""]([^'"]+)['""])?/,
+      /^([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(\*-->|-->|---|-.->|==|\.\.>)\s*([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?\s*(?::\s*['""]([^'"]+)['""])?/,
     ];
 
     for (const pattern of patterns) {
@@ -366,6 +368,10 @@ export class MermaidParser {
         return ConnectionType.ASSOCIATION;
       case '==':
         return ConnectionType.INHERITANCE;
+      case '*-->':
+        return ConnectionType.COMPOSITION;
+      case '..>':
+        return ConnectionType.DEPENDENCY;
       default:
         return ConnectionType.ASSOCIATION;
     }

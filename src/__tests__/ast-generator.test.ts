@@ -103,6 +103,82 @@ describe('AST3DGenerator', () => {
     expect(connection.target.faceId).toBe('back');
   });
 
+  test('should parse COMPOSITION connection type with *-->', () => {
+    const syntax = `
+      A[Component: App]
+      B((Service: AuthService))
+      A *--> B : "contains"
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('composition');
+  });
+
+  test('should parse DEPENDENCY connection type with ..>', () => {
+    const syntax = `
+      A((Service: AuthService))
+      B[[Store: UserDatabase]]
+      A ..> B : "reads credentials"
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('dependency');
+  });
+
+  test('should parse *--> with pipe-label syntax', () => {
+    const syntax = `
+      A[Component: App]
+      B((Service: AuthService))
+      A *-->|"contains"| B
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('composition');
+  });
+
+  test('should parse ..> with pipe-label syntax', () => {
+    const syntax = `
+      A((Service: AuthService))
+      B[[Store: UserDatabase]]
+      A ..>|"depends on"| B
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('dependency');
+  });
+
+  test('should parse *--> with face-specific connections', () => {
+    const syntax = `
+      A[Component: App]
+      B((Service: AuthService))
+      A@front *--> B@back : "composition"
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('composition');
+    expect(connections[0].source.faceId).toBe('front');
+    expect(connections[0].target.faceId).toBe('back');
+  });
+
+  test('should parse ..> with face-specific connections', () => {
+    const syntax = `
+      A((Service: AuthService))
+      B[[Store: UserDatabase]]
+      A@top ..> B@bottom : "dependency"
+    `;
+    const graph = generator.generate(syntax);
+    const connections = Array.from(graph.connections.values());
+    expect(connections).toHaveLength(1);
+    expect(connections[0].type).toBe('dependency');
+    expect(connections[0].source.faceId).toBe('top');
+    expect(connections[0].target.faceId).toBe('bottom');
+  });
+
   test('should generate JSON export', () => {
     const syntax = `
       A[Function: test]
